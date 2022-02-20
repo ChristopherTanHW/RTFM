@@ -44,6 +44,7 @@ from core import file_writer
 from core import prof
 from core import vtrace
 
+import pandas as pd
 
 Net = None
 
@@ -514,7 +515,16 @@ def main(flags):
 
 
 if __name__ == '__main__':
+    #f = open("myfile.txt")
+
+    start = time.time()
     parser = exp_utils.get_parser()
     flags = parser.parse_args()
     flags.xpid = flags.xpid or exp_utils.compose_name(flags.model, flags.wiki, flags.env, flags.prefix)
-    main(flags)
+    #main(flags)
+    print(flags)
+    exp_log = pd.read_csv('experiment_logs.csv')
+    print(exp_log)
+    end = time.time()
+    execution_time = end - start
+    print('execution_time in seconds: ', execution_time)
