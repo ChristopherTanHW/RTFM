@@ -270,7 +270,7 @@ def create_buffers(observation_shapes, num_actions, flags) -> Buffers:
     return buffers
 
 
-def train(flags):  # pylint: disable=too-many-branches, too-many-statements
+def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-statements
     if flags.xpid is None:
         flags.xpid = 'torchbeast-%s' % time.strftime('%Y%m%d-%H%M%S')
     plogger = file_writer.FileWriter(
@@ -369,6 +369,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
             with lock:
                 to_log = dict(frames=frames)
                 to_log.update({k: stats[k] for k in stat_keys})
+                to_log.update({'exp_id': exp_id})
                 plogger.log(to_log)
                 frames += T * B
 
@@ -502,29 +503,38 @@ def test(flags, num_eps: int = 1000):
     logging.info('Average returns over %i episodes: %.2f. Win rate: %.2f. Entropy: %.2f. Len: %.2f', num_eps, sum(returns)/len(returns), sum(won)/len(returns), sum(entropy)/max(1, len(entropy)), sum(ep_len)/len(ep_len))
 
 
-def main(flags):
+def main(flags, exp_id):
     flags.num_buffers = 2 * flags.num_actors
 
     global Net
     Net = importlib.import_module('model.{}'.format(flags.model)).Model
 
     if flags.mode == 'train':
-        train(flags)
+        train(flags, exp_id)
     else:
         test(flags)
 
 
 if __name__ == '__main__':
-    #f = open("myfile.txt")
-
-    start = time.time()
     parser = exp_utils.get_parser()
     flags = parser.parse_args()
     flags.xpid = flags.xpid or exp_utils.compose_name(flags.model, flags.wiki, flags.env, flags.prefix)
-    #main(flags)
-    print(flags)
+
+    #read the experiment log into a pandas dataframe then getting the next experiment id
     exp_log = pd.read_csv('experiment_logs.csv')
-    print(exp_log)
+    exp_id = int(exp_log['exp_id'].iloc[-1]) + 1
+
+    #run the experiment and time it
+    start = time.time()
+    main(flags, exp_id)
     end = time.time()
     execution_time = end - start
+
+    experiment_dict = flags.__dict__
+    experiment_dict['exp_id'] = exp_id
+    experiment_dict['time_taken'] = execution_time
+    exp_log = exp_log.append(experiment_dict, ignore_index=True)
+    exp_log = exp_log[exp_log.columns.drop(list(exp_log.filter(regex='Unnamed')))]
+    exp_log.to_csv('experiment_logs.csv')
+
     print('execution_time in seconds: ', execution_time)
