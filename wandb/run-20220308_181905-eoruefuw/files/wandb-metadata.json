@@ -1,0 +1,24 @@
+{
+    "os": "Linux-3.10.0-1160.59.1.el7.x86_64-x86_64-with-glibc2.17",
+    "python": "3.9.8",
+    "heartbeatAt": "2022-03-08T18:19:08.764467",
+    "startedAt": "2022-03-08T18:19:05.912079",
+    "docker": null,
+    "gpu": "GeForce RTX 2080",
+    "gpu_count": 2,
+    "cpu_count": 16,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "/cs/student/ug/2018/hongtan/Desktop/rtfm_project/RTFM/batch_experiments.py",
+    "codePath": "batch_experiments.py",
+    "git": {
+        "remote": "https://github.com/ChristopherTanHW/RTFM.git",
+        "commit": "4a662b79c9b30eb2a0e10dbf1ba8bda5c119fdcb"
+    },
+    "email": "christopher@tansgp.com",
+    "root": "/cs/student/ug/2018/hongtan/Desktop/rtfm_project/RTFM",
+    "host": "sml6.cs.ucl.ac.uk",
+    "username": "hongtan",
+    "executable": "/cs/student/ug/2018/hongtan/Desktop/rtfm_project/venv/bin/python"
+}

@@ -45,6 +45,9 @@ from core import prof
 from core import vtrace
 
 import pandas as pd
+import wandb
+
+project_name = "num_objects"
 
 Net = None
 
@@ -80,8 +83,7 @@ def compute_policy_gradient_loss(logits, actions, advantages):
     return torch.sum(torch.mean(policy_gradient_loss_per_timestep, dim=1))
 
 
-def act(i: int, free_queue: mp.SimpleQueue, full_queue: mp.SimpleQueue,
-        model: torch.nn.Module, buffers: Buffers, flags):
+def act(i: int, free_queue: mp.SimpleQueue, full_queue: mp.SimpleQueue, model: torch.nn.Module, buffers: Buffers, flags):
     try:
         logging.info('Actor %i started.', i)
         timings = prof.Timings()  # Keep track of how fast things are.
@@ -235,6 +237,8 @@ def learn(actor_model,
             'entropy_loss': entropy_loss.item(),
             'aux_loss': aux_loss.item(),
         }
+        #wandb watch
+        wandb.watch(model, total_loss, log='all', log_freq=10)
 
         optimizer.zero_grad()
         model.zero_grad()
@@ -315,7 +319,7 @@ def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-stateme
     learner_model = Net.make(flags, env).to(device=flags.device)
 
     optimizer = torch.optim.RMSprop(
-        learner_model.parameters(),
+        learner_model.parameters(),#loss,
         lr=flags.learning_rate,
         momentum=flags.momentum,
         eps=flags.epsilon,
@@ -359,12 +363,15 @@ def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-stateme
         """Thread target for the learning process."""
         nonlocal frames, stats
         timings = prof.Timings()
+        batch_count = 0
         while frames < flags.total_frames:
             timings.reset()
+            batch_count += 1
             batch = get_batch(free_queue, full_queue, buffers, flags, timings)
 
             stats = learn(model, learner_model, batch, optimizer, scheduler,
                           flags)
+            wandb.log(stats)
             timings.time('learn')
             with lock:
                 to_log = dict(frames=frames)
@@ -372,6 +379,7 @@ def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-stateme
                 to_log.update({'exp_id': exp_id})
                 plogger.log(to_log)
                 frames += T * B
+        print("batch_count: ", batch_count)
 
         if i == 0:
             logging.info('Batch and learn: %s', timings.summary())
@@ -510,7 +518,9 @@ def main(flags, exp_id):
     Net = importlib.import_module('model.{}'.format(flags.model)).Model
 
     if flags.mode == 'train':
-        train(flags, exp_id)
+        config_dict = dict(vars(flags))
+        with wandb.init(project="setting up", config=config_dict, name='test1'):
+            train(flags, exp_id)
     else:
         test(flags)
 
