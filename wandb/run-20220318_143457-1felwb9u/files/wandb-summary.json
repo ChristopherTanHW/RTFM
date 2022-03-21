@@ -1,1 +1,0 @@
-{"mean_win_rate": 0.1150442510843277, "mean_episode_len": 14.017699241638184, "mean_episode_return": -1.0302653312683105, "total_loss": -2.027595281600952, "pg_loss": -6.5911149978637695, "baseline_loss": 4.627166748046875, "entropy_loss": -0.06364711374044418, "aux_loss": 0.0, "_timestamp": 1647614130, "_runtime": 32, "_step": 8, "_wandb": {"runtime": 34}}

@@ -59,7 +59,7 @@ logging.basicConfig(
 
 Buffers = typing.Dict[str, typing.List[torch.Tensor]]
 
-
+LOG_COUNT = 0
 def compute_baseline_loss(advantages):
     # Take the mean over batch, sum over time.
     return 0.5 * torch.sum(torch.mean(advantages ** 2, dim=1))
@@ -238,7 +238,7 @@ def learn(actor_model,
             'aux_loss': aux_loss.item(),
         }
         #wandb watch
-        wandb.watch(model, total_loss, log='all', log_freq=10)
+        #wandb.watch(model, total_loss, log='all', log_freq=10)
 
         optimizer.zero_grad()
         model.zero_grad()
@@ -371,7 +371,6 @@ def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-stateme
 
             stats = learn(model, learner_model, batch, optimizer, scheduler,
                           flags)
-            wandb.log(stats)
             timings.time('learn')
             with lock:
                 to_log = dict(frames=frames)
@@ -379,8 +378,6 @@ def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-stateme
                 to_log.update({'exp_id': exp_id})
                 plogger.log(to_log)
                 frames += T * B
-        print("batch_count: ", batch_count)
-
         if i == 0:
             logging.info('Batch and learn: %s', timings.summary())
 
@@ -412,7 +409,7 @@ def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-stateme
             start_frames = frames
             start_time = timer()
             time.sleep(5)
-
+            wandb.log(stats)
             if timer() - last_checkpoint_time > 10 * 60:  # Save every 10 min.
                 checkpoint()
                 last_checkpoint_time = timer()
@@ -425,8 +422,8 @@ def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-stateme
                 mean_return = ''
             total_loss = stats.get('total_loss', float('inf'))
             logging.info('After %i frames: loss %f @ %.1f fps. %sStats:\n%s',
-                         frames, total_loss, fps, mean_return,
-                         pprint.pformat(stats))
+                        frames, total_loss, fps, mean_return,
+                        pprint.pformat(stats))
     except KeyboardInterrupt:
         return  # Try joining actors then quit.
     else:
@@ -443,7 +440,7 @@ def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-stateme
     plogger.close()
 
 
-def test(flags, num_eps: int = 1000):
+def test(flags, num_eps: int = 2): #num_eps originall 2
     from rtfm import featurizer as X
     gym_env = Net.create_env(flags)
     if flags.mode == 'test_render':
@@ -519,7 +516,9 @@ def main(flags, exp_id):
 
     if flags.mode == 'train':
         config_dict = dict(vars(flags))
-        with wandb.init(project="setting up", config=config_dict, name='test1'):
+        print('flags: ', config_dict)
+        with wandb.init(project="baseline", config=config_dict, 
+            name='rps_5k_frames2', dir='/scratch0/NOT_BACKED_UP/sml/christan/rtfm'):
             train(flags, exp_id)
     else:
         test(flags)

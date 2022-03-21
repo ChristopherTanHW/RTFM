@@ -27,7 +27,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     featurizer = F.Concat([F.Progress(), F.ValidMoves(), F.Terminal()])
-    env = gym.make('rtfm:{}-v0'.format(args.env), featurizer=featurizer, partially_observable=args.partially_observable, room_shape=(args.height, args.width), shuffle_wiki=args.shuffle_wiki)
+    #env = gym.make('rtfm:{}-v0'.format(args.env), featurizer=featurizer, partially_observable=args.partially_observable, room_shape=(args.height, args.width), shuffle_wiki=args.shuffle_wiki)
+    env = gym.make('{}-v0'.format(args.env), featurizer=featurizer, partially_observable=args.partially_observable, room_shape=(args.height, args.width), shuffle_wiki=args.shuffle_wiki)
 
     random.seed(args.seed)
 
