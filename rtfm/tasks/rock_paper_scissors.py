@@ -15,6 +15,8 @@ from .. import featurizer as F
 
 ALL_TYPES = [types.Cold, types.Fire, types.Lightning]
 
+# f = open("debugging.txt", "w")
+
 
 class RockPaperScissors(RoomTask):
     split_index = 0
@@ -33,7 +35,8 @@ class RockPaperScissors(RoomTask):
         dev = perms[n:]
         return train, dev
 
-    class Dragon(M.HostileMonster):
+    # class Dragon(M.HostileMonster):
+    class Dragon(M.HostileMonster): 
         char = '!'
 
         def __init__(self, element, name):
@@ -82,7 +85,7 @@ class RockPaperScissors(RoomTask):
         for i in range(len(labels)):
             self.TYPE_TO_MONSTER[ALL_TYPES[i]] = labels[i]
             self.TYPE_TO_ITEM[ALL_TYPES[i]] = labels[(i+1) % len(ALL_TYPES)]
-
+            
     def get_reward_finish_win(self):
         agent_dead = self.agent_is_dead()
         killed_enemy = any([not e.is_alive() for e in self.enemies])
@@ -105,7 +108,13 @@ class RockPaperScissors(RoomTask):
         facts = []
         for el in ALL_TYPES:
             facts.append('{} beats {}.'.format(self.TYPE_TO_ITEM[el], self.TYPE_TO_MONSTER[el]))
-        return ' '.join(facts)
+        wiki = ' '.join(facts)
+        # f.write(wiki + '\n')
+        return wiki
+
+    # def get_wiki(self):
+    #     wiki = 'a beats b. b beats c. c beats a'
+    #     return wiki
 
     def build_vocab(self):
         super().build_vocab()
@@ -124,7 +133,8 @@ class RockPaperScissors(RoomTask):
 
         self.agent = self.place_object(self.Agent())
 
-        self.set_types(random.choice(self.labels))
+        # self.set_types(random.choice(self.labels))
+        self.set_types(('b', 'a', 'c'))
         self.type_index = np.random.randint(0, len(ALL_TYPES))
         monster_type = ALL_TYPES[self.type_index]
 

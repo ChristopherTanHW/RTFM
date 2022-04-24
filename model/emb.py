@@ -7,7 +7,7 @@
 import torch
 from torch import nn
 from model.reader import Model as Base
-
+# f = open("embeddings.txt", "w")
 
 class Model(Base):
 

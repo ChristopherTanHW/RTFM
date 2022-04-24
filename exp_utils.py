@@ -20,7 +20,7 @@ def get_parser():
     parser.add_argument('--env', type=str, default='rtfm:rock_paper_scissors-v0',
                         help='Gym environment.')
     parser.add_argument('--mode', default='train',
-                        choices=['train', 'test', 'test_render'],
+                        choices=['train', 'test', 'test_render', 'train_writer'],
                         help='Training or test mode.')
     parser.add_argument('--xpid', default=None,
                         help='Experiment id. Autopopulated if not filled.')

@@ -47,10 +47,19 @@ from core import vtrace
 import pandas as pd
 import wandb
 
+from metaBandit import UCBBandit
+from rtfm.tasks import RockPaperScissors
+from rtfm import featurizer as Fe
+
 project_name = "num_objects"
+
+MODEL_NAME = 'RPS_DEFAULT_TRAIN.tar'
 
 Net = None
 
+f = open("debugging.txt", "w")
+
+from types import MethodType
 
 logging.basicConfig(
     format=('[%(levelname)s:%(process)d %(module)s:%(lineno)d %(asctime)s] '
@@ -115,6 +124,8 @@ def act(i: int, free_queue: mp.SimpleQueue, full_queue: mp.SimpleQueue, model: t
                 timings.time('model')
 
                 env_output = env.step(agent_output['action'])
+                s1 = 'env output \n' + str(env_output) + '\n'
+                # f.write(s1)
 
                 timings.time('step')
 
@@ -238,7 +249,7 @@ def learn(actor_model,
             'aux_loss': aux_loss.item(),
         }
         #wandb watch
-        #wandb.watch(model, total_loss, log='all', log_freq=10)
+        # wandb.watch(model, total_loss, log='all', log_freq=10)
 
         optimizer.zero_grad()
         model.zero_grad()
@@ -274,7 +285,7 @@ def create_buffers(observation_shapes, num_actions, flags) -> Buffers:
     return buffers
 
 
-def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-statements
+def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     if flags.xpid is None:
         flags.xpid = 'torchbeast-%s' % time.strftime('%Y%m%d-%H%M%S')
     plogger = file_writer.FileWriter(
@@ -301,6 +312,9 @@ def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-stateme
     env = Net.create_env(flags)
     model = Net.make(flags, env)
     buffers = create_buffers(env.observation_space, len(env.action_space), flags)
+    metadat = {}
+    for k,v in buffers.items():
+        metadat[k] = len(v)
 
     model.share_memory()
 
@@ -375,7 +389,6 @@ def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-stateme
             with lock:
                 to_log = dict(frames=frames)
                 to_log.update({k: stats[k] for k in stat_keys})
-                to_log.update({'exp_id': exp_id})
                 plogger.log(to_log)
                 frames += T * B
         if i == 0:
@@ -439,13 +452,14 @@ def train(flags, exp_id):  # pylint: disable=too-many-branches, too-many-stateme
     checkpoint()
     plogger.close()
 
-
-def test(flags, num_eps: int = 2): #num_eps originall 2
+def train_meta_writer(flags, num_eps: int = 1): #num_eps originally 2
+    meta_writer = UCBBandit(3, bonus_multiplier=1/np.sqrt(2))
     from rtfm import featurizer as X
-    gym_env = Net.create_env(flags)
+    gym_env = RockPaperScissors(featurizer=X.Concat([X.Text(),X.ValidMoves(), X.RelativePosition()]), max_placement=1)
     if flags.mode == 'test_render':
         gym_env.featurizer = X.Concat([gym_env.featurizer, X.Terminal()])
     env = environment.Environment(gym_env)
+    env.gym_env.get_wiki = MethodType(lambda x : 'a beats b. c beats a. b beats c.', env.gym_env)
 
     if not flags.random_agent:
         model = Net.make(flags, gym_env)
@@ -470,7 +484,8 @@ def test(flags, num_eps: int = 2): #num_eps originall 2
         while not done:
             if flags.random_agent:
                 action = torch.zeros(1, 1, dtype=torch.int32)
-                action[0][0] = random.randint(0, gym_env.action_space.n - 1)
+                # action[0][0] = random.randint(0, gym_env.action_space.n - 1)
+                action[0][0] = random.randint(0, len(gym_env.action_space) - 1)
                 observation = env.step(action)
             else:
                 agent_outputs = model(observation)
@@ -508,20 +523,76 @@ def test(flags, num_eps: int = 2): #num_eps originall 2
     logging.info('Average returns over %i episodes: %.2f. Win rate: %.2f. Entropy: %.2f. Len: %.2f', num_eps, sum(returns)/len(returns), sum(won)/len(returns), sum(entropy)/max(1, len(entropy)), sum(ep_len)/len(ep_len))
 
 
-def main(flags, exp_id):
+def test(flags, num_eps: int = 100): #num_eps originall 2
+    from rtfm import featurizer as X
+    # gym_env = Net.create_env(flags)
+    gym_env = RockPaperScissors(featurizer=X.Concat([X.Text(),X.ValidMoves(), X.RelativePosition()]), max_placement=1)
+    if flags.mode == 'test_render':
+        gym_env.featurizer = X.Concat([gym_env.featurizer, X.Terminal()])
+    env = environment.Environment(gym_env)
+    env.gym_env.get_wiki = MethodType(lambda x : 'a beats c. c beats b. b beats a.', env.gym_env)
+
+    if not flags.random_agent:
+        model = Net.make(flags, gym_env)
+        model.eval()
+        if flags.xpid is None:
+            checkpointpath = './results_latest/model.tar'
+        else:
+            checkpointpath = os.path.expandvars(
+                os.path.expanduser('%s/%s/%s' % (flags.savedir, flags.xpid,
+                                                 'model.tar')))
+        checkpoint = torch.load(checkpointpath, map_location='cpu')
+        model.load_state_dict(checkpoint['model_state_dict'])
+
+    observation = env.initial()
+    returns = []
+    won = []
+    entropy = []
+    ep_len = []
+    while len(won) < num_eps:
+        done = False
+        steps = 0
+        while not done:
+            if flags.random_agent:
+                action = torch.zeros(1, 1, dtype=torch.int32)
+                # action[0][0] = random.randint(0, gym_env.action_space.n - 1)
+                action[0][0] = random.randint(0, len(gym_env.action_space) - 1)
+                observation = env.step(action)
+            else:
+                agent_outputs = model(observation)
+                observation = env.step(agent_outputs['action'])
+                policy = F.softmax(agent_outputs['policy_logits'], dim=-1)
+                log_policy = F.log_softmax(agent_outputs['policy_logits'], dim=-1)
+                e = -torch.sum(policy * log_policy, dim=-1)
+                entropy.append(e.mean(0).item())
+
+            steps += 1
+            done = observation['done'].item()
+            if observation['done'].item():
+                returns.append(observation['episode_return'].item())
+                won.append(observation['reward'][0][0].item() > 0.5)
+                ep_len.append(steps)
+
+    env.close()
+    logging.info('Average returns over %i episodes: %.2f. Win rate: %.2f. Entropy: %.2f. Len: %.2f', num_eps, sum(returns)/len(returns), sum(won)/len(returns), sum(entropy)/max(1, len(entropy)), sum(ep_len)/len(ep_len))
+
+
+def main(flags):
     flags.num_buffers = 2 * flags.num_actors
 
+    config_dict = dict(vars(flags))
+    print('flags: ', config_dict)
+    
     global Net
     Net = importlib.import_module('model.{}'.format(flags.model)).Model
-
     if flags.mode == 'train':
-        config_dict = dict(vars(flags))
-        print('flags: ', config_dict)
-        with wandb.init(project="baseline", config=config_dict, 
-            name='rps_5k_frames2', dir='/scratch0/NOT_BACKED_UP/sml/christan/rtfm'):
-            train(flags, exp_id)
-    else:
+        with wandb.init(project="RPS", config=config_dict, 
+        name='RPS_default_github_settings', dir='/scratch0/NOT_BACKED_UP/sml/christan/rtfm'):
+            train(flags)
+    elif flags.mode == 'test':
         test(flags)
+    else:
+        train_meta_writer(flags)
 
 
 if __name__ == '__main__':
@@ -529,21 +600,10 @@ if __name__ == '__main__':
     flags = parser.parse_args()
     flags.xpid = flags.xpid or exp_utils.compose_name(flags.model, flags.wiki, flags.env, flags.prefix)
 
-    #read the experiment log into a pandas dataframe then getting the next experiment id
-    exp_log = pd.read_csv('experiment_logs.csv')
-    exp_id = int(exp_log['exp_id'].iloc[-1]) + 1
-
     #run the experiment and time it
     start = time.time()
-    main(flags, exp_id)
+    main(flags)
     end = time.time()
     execution_time = end - start
-
-    experiment_dict = flags.__dict__
-    experiment_dict['exp_id'] = exp_id
-    experiment_dict['time_taken'] = execution_time
-    exp_log = exp_log.append(experiment_dict, ignore_index=True)
-    exp_log = exp_log[exp_log.columns.drop(list(exp_log.filter(regex='Unnamed')))]
-    exp_log.to_csv('experiment_logs.csv')
 
     print('execution_time in seconds: ', execution_time)

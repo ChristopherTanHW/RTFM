@@ -24,8 +24,8 @@ class RoomTask(Task):
     def get_task(self):
         return 'Move around.'
 
-    def get_wiki(self):
-        return 'Welcome to MiniHack.'
+    # def get_wiki(self):
+    #     return 'Welcome to MiniHack.'
 
     def _reset(self):
         super()._reset()
