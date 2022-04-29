@@ -1,20 +1,23 @@
 from distutils import command
 import os
 
-args_dict = {'env':'rock_paper_scissors-v0', 
+args_dict = {
+# 'env':'rock_paper_scissors-v0',
+'env': 'groups_simple_stationary-v0',
 'model':'paper_txt2pi',
-'demb':'10',
-'drnn_small': '10',
-'drnn':'100',
-'drep':'300',
-'num_actors':'20',
-'batch_size':'24',
-'learning_rate':'0.0007',
-'total_frames':'50000000',
-'height':'10',
-'width':'10',
-'mode': 'train_writer',
-'resume': 'checkpoints/rock_paper_scissors:paper_txt2pi:yeswiki:default/model.tar'}
+# 'demb':'10',
+# 'drnn_small': '10',
+# 'drnn':'100',
+# 'drep':'300',
+# 'num_actors':'20',
+# 'batch_size':'24',
+# 'learning_rate':'0.0007',
+# 'total_frames':'1000000',
+# 'height':'10',
+# 'width':'10',
+'mode': 'test',
+'xpid': 'groups_simple_stationary:paper_txt2pi:yeswiki:default',
+'resume': 'checkpoints/groups_simple_stationary:paper_txt2pi:yeswiki:default/model.tar'}
 
 
 #this particular experiment looks at learning rate

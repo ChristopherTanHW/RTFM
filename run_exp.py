@@ -47,13 +47,10 @@ from core import vtrace
 import pandas as pd
 import wandb
 
-from metaBandit import UCBBandit
+from metaWriter import UCBBandit
 from rtfm.tasks import RockPaperScissors
-from rtfm import featurizer as Fe
 
 project_name = "num_objects"
-
-MODEL_NAME = 'RPS_DEFAULT_TRAIN.tar'
 
 Net = None
 
@@ -294,10 +291,12 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
         rootdir=flags.savedir,
         symlink_latest=False,
     )
+    # checkpointpath = os.path.expandvars(
+    #     os.path.expanduser('%s/%s/%s' % (flags.savedir, flags.xpid,
+    #                                      'RPS2.tar')))
     checkpointpath = os.path.expandvars(
-        os.path.expanduser('%s/%s/%s' % (flags.savedir, flags.xpid,
+        os.path.expanduser('%s/%s/%s' % (flags.savedir, 'RPS',
                                          'model.tar')))
-
     T = flags.unroll_length
     B = flags.batch_size
 
@@ -452,14 +451,58 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     checkpoint()
     plogger.close()
 
-def train_meta_writer(flags, num_eps: int = 1): #num_eps originally 2
-    meta_writer = UCBBandit(3, bonus_multiplier=1/np.sqrt(2))
+# ------ helper functions for meta writer -------
+def add_sym(orders, ls):
+    new_orders = []
+    for order in orders:
+        for c in ls:
+            new_order = order + [c]
+            new_orders.append(new_order)
+    return new_orders
+
+def get_all_orders(orders, n, ls):
+    while len(orders[0]) < n:
+        orders = add_sym(orders, ls)
+    orders_dict = {}
+    for i in range(len(orders)):
+        orders_dict[i] = orders[i]
+    return orders_dict
+
+def bandit_action_to_wiki(action_idx, action_map):
+    action = action_map[action_idx]
+    wiki = action[0] + ' beats ' + action[1] + '. '
+    wiki += action[2] + ' beats ' + action[3] + '. '
+    wiki += action[4] + ' beats ' + action[5] + '. '
+    return wiki
+
+def action_to_wiki(action, action_map):
+    wiki = action_map[action[0]] + ' beats ' + action_map[action[1]] + '. '
+    wiki += action_map[action[2]] + ' beats ' + action_map[action[3]] + '. '
+    wiki += action_map[action[4]] + ' beats ' + action_map[action[5]] + '. '
+    return wiki
+
+# ------------------------------------------------
+
+def train_meta_writer(flags, num_eps: int = 500):
+    # all_orders = get_all_orders([['a'], ['b'], ['c']], 6, ['a', 'b', 'c'])
+    # meta_action_map = all_orders
+    meta_action_map = {0: 'a', 1: 'b', 2: 'c'}
+    meta_writer = UCBBandit(len(meta_action_map), bonus_multiplier=1/np.sqrt(2))
+
+    # meta_action_map = {0: 'a', 1: 'c', 2: 'e'}
+    # meta_writer = TabQ(0.1, 0.99, 0.1, 6, 3)
+
+    rolling_win_rate = []
+    rolling_wins = 0
+    rolling_window = 10
+    rolling_win_counter = 0
+
     from rtfm import featurizer as X
     gym_env = RockPaperScissors(featurizer=X.Concat([X.Text(),X.ValidMoves(), X.RelativePosition()]), max_placement=1)
     if flags.mode == 'test_render':
         gym_env.featurizer = X.Concat([gym_env.featurizer, X.Terminal()])
     env = environment.Environment(gym_env)
-    env.gym_env.get_wiki = MethodType(lambda x : 'a beats b. c beats a. b beats c.', env.gym_env)
+    # env.gym_env.get_wiki = MethodType(lambda x : 'a beats a. a beats a. a beats a.', env.gym_env)
 
     if not flags.random_agent:
         model = Net.make(flags, gym_env)
@@ -478,6 +521,8 @@ def train_meta_writer(flags, num_eps: int = 1): #num_eps originally 2
     won = []
     entropy = []
     ep_len = []
+    # meta_action = np.zeros(6)
+    meta_action = None     #for UCBBandit
     while len(won) < num_eps:
         done = False
         steps = 0
@@ -498,6 +543,28 @@ def train_meta_writer(flags, num_eps: int = 1): #num_eps originally 2
             steps += 1
             done = observation['done'].item()
             if observation['done'].item():
+                # BANDIT CODE
+                meta_action = meta_writer.step(meta_action, observation['episode_return'].item())
+                wiki_str = 'a beats b. ' + meta_action_map[meta_action] + ' beats a. b beats c.'
+                f.write(wiki_str + '\n')
+                # wiki = action_to_wiki(meta_action, meta_action_map)
+                env.gym_env.get_wiki = MethodType(lambda x : wiki_str, env.gym_env)
+
+                #MDP AGENT CODE
+                #randomly sample which blank to fill in
+                # meta_writer.update_Q(current_state, next_state, action, reward)
+                # state = random.randint(0,5)
+                # meta_action = meta_writer(state)
+
+
+                rolling_win_counter += 1
+                if observation['reward'][0][0].item() > 0.5:
+                    if rolling_win_counter < 10:
+                        rolling_wins += 1
+                    else:
+                        rolling_win_rate.append(rolling_wins / rolling_window)
+                        rolling_wins = 0
+                        rolling_win_counter = 0
                 returns.append(observation['episode_return'].item())
                 won.append(observation['reward'][0][0].item() > 0.5)
                 ep_len.append(steps)
@@ -509,6 +576,7 @@ def train_meta_writer(flags, num_eps: int = 1): #num_eps originally 2
                 time.sleep(float(sleep_seconds))
 
                 if observation['done'].item():
+
                     print('Done: {}'.format('You won!!' if won[-1] else 'You lost!!'))
                     print('Episode steps: {}'.format(observation['episode_step']))
                     print('Episode return: {}'.format(observation['episode_return']))
@@ -521,16 +589,18 @@ def train_meta_writer(flags, num_eps: int = 1): #num_eps originally 2
 
     env.close()
     logging.info('Average returns over %i episodes: %.2f. Win rate: %.2f. Entropy: %.2f. Len: %.2f', num_eps, sum(returns)/len(returns), sum(won)/len(returns), sum(entropy)/max(1, len(entropy)), sum(ep_len)/len(ep_len))
+    print(rolling_win_rate)
+    print(rolling_win_counter)
+    print(rolling_wins)
 
-
-def test(flags, num_eps: int = 100): #num_eps originall 2
+def test(flags, num_eps: int = 10): #num_eps originall 2
     from rtfm import featurizer as X
-    # gym_env = Net.create_env(flags)
-    gym_env = RockPaperScissors(featurizer=X.Concat([X.Text(),X.ValidMoves(), X.RelativePosition()]), max_placement=1)
+    gym_env = Net.create_env(flags)
+    # gym_env = RockPaperScissors(featurizer=X.Concat([X.Text(),X.ValidMoves(), X.RelativePosition()]), max_placement=1)
     if flags.mode == 'test_render':
         gym_env.featurizer = X.Concat([gym_env.featurizer, X.Terminal()])
     env = environment.Environment(gym_env)
-    env.gym_env.get_wiki = MethodType(lambda x : 'a beats c. c beats b. b beats a.', env.gym_env)
+    # env.gym_env.get_wiki = MethodType(lambda x : 'a beats c. c beats b. b beats a.', env.gym_env)
 
     if not flags.random_agent:
         model = Net.make(flags, gym_env)
@@ -587,7 +657,7 @@ def main(flags):
     Net = importlib.import_module('model.{}'.format(flags.model)).Model
     if flags.mode == 'train':
         with wandb.init(project="RPS", config=config_dict, 
-        name='RPS_default_github_settings', dir='/scratch0/NOT_BACKED_UP/sml/christan/rtfm'):
+        name='fromcheckpoint_IDsinglegame_1lie_samemonster', dir='/scratch0/NOT_BACKED_UP/sml/christan/rtfm'):
             train(flags)
     elif flags.mode == 'test':
         test(flags)

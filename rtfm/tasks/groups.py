@@ -15,6 +15,7 @@ from rtfm.tasks import groups_templates
 
 ALL_TYPES = [types.Cold, types.Fire, types.Lightning, types.Poison]
 
+f = open("debugging.txt", "w")
 
 def generate_all(all_monsters, all_groups, all_modifiers):
     # all monster assignments
@@ -146,12 +147,15 @@ class Groups(RoomTask):
         return 'defeat the {}'.format(self.target_group)
 
     def get_wiki(self):
-        facts = []
-        for element, modifiers in self.modifier_assignment:
-            facts += ['{} beat {}.'.format(', '.join(modifiers), element.describe())]
-        for group, monsters in self.group_assignment:
-            facts += ['{} are {}.'.format(', '.join(monsters), group)]
-        return ' '.join(facts)
+        return ' '
+
+    # def get_wiki(self):
+    #     facts = []
+    #     for element, modifiers in self.modifier_assignment:
+    #         facts += ['{} beat {}.'.format(', '.join(modifiers), element.describe())]
+    #     for group, monsters in self.group_assignment:
+    #         facts += ['{} are {}.'.format(', '.join(monsters), group)]
+    #     return ' '.join(facts)
 
     def get_wiki_extract(self):
         labels = []
@@ -196,6 +200,8 @@ class Groups(RoomTask):
 
         # sample dynamics
         sample_group, sample_mod = random.choice(self.configs)
+        f.write('sample_group: ' + str(sample_group) + '\n')
+        f.write('sample_mod: ' + str(sample_mod) + '\n')
         for group, monsters in sorted(list(sample_group)):
             self.group_assignment.append((group, monsters))
         for element, modifiers in sorted(list(sample_mod)):
@@ -276,7 +282,6 @@ class GroupsSimpleDev(GroupsSimple):
 class GroupsSimpleStationary(GroupsStationary):
     monsters = Groups.monsters[:3]
     modifiers = Groups.modifiers[:4]
-
 
 class GroupsSimpleStationaryDev(GroupsSimpleStationary):
     config_index = 1
