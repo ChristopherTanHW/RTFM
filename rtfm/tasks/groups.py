@@ -15,7 +15,7 @@ from rtfm.tasks import groups_templates
 
 ALL_TYPES = [types.Cold, types.Fire, types.Lightning, types.Poison]
 
-f = open("debugging.txt", "w")
+f = open("groups.txt", "w")
 
 def generate_all(all_monsters, all_groups, all_modifiers):
     # all monster assignments
@@ -77,7 +77,7 @@ class Groups(RoomTask):
         'sword', 'axe', 'morningstar', 'polearm', 'knife', 'katana', 'cutlass', 'spear',
     ]
     config_index = 0
-    default_max_iter = 1000
+    default_max_iter = 20 # detault is 1000
 
     class Monster(M.HostileMonster):
         char = '!'
@@ -118,6 +118,7 @@ class Groups(RoomTask):
 
     def __init__(self, room_shape=(10, 10), featurizer=F.Progress(), partially_observable=False, max_placement=2, max_name=8, max_inv=10, max_wiki=80, max_task=40, time_penalty=-0.02, shuffle_wiki=False):
         self.configs = generate_all(self.monsters, self.groups, self.modifiers)[self.config_index]
+        # f.write(str(self.configs) + '\n')
         # what group of enemies to target
         self.target_monster = None
         self.target_group = None
@@ -125,6 +126,13 @@ class Groups(RoomTask):
         self.distractor_item = None
         self.modifier_assignment = []
         self.group_assignment = []
+
+        # these attributes are for the get_relevant_statements method
+        self.target_weapon_mod = None
+        self.target_monster_mod = None
+        self.target_monster_type = None
+        self.target_monster_group = None
+
         self._cache = {}
         super().__init__(room_shape, featurizer, partially_observable, self.default_max_iter, max_placement, max_name, max_inv, max_wiki, max_task, time_penalty, shuffle_wiki=shuffle_wiki)
 
@@ -144,18 +152,31 @@ class Groups(RoomTask):
         return r, finished, won
 
     def get_task(self):
+        task = 'defeat the {}'.format(self.target_group)
+        f.write(task + '\n')
         return 'defeat the {}'.format(self.target_group)
 
-    def get_wiki(self):
-        return ' '
-
     # def get_wiki(self):
-    #     facts = []
-    #     for element, modifiers in self.modifier_assignment:
-    #         facts += ['{} beat {}.'.format(', '.join(modifiers), element.describe())]
-    #     for group, monsters in self.group_assignment:
-    #         facts += ['{} are {}.'.format(', '.join(monsters), group)]
-    #     return ' '.join(facts)
+    #     wiki = 'blessed beat cold. shimmering beat fire. grandmasters beat lightning. gleaming beat poison. jaguar are order of the forest. wolf are rebel enclave. panther are star alliance.'
+    #     wiki = 'grandmasters beat cold. gleaming beat fire. blessed beat lightning. shimmering beat poison. panther are order of the forest. jaguar are rebel enclave. wolf are star alliance.'
+    #     wiki = 'blessed beat cold. grandmasters beat fire. shimmering beat lightning. gleaming beat poison. panther are order of the forest. jaguar are rebel enclave. wolf are star alliance.'
+    #     return wiki
+
+    def get_wiki(self):
+        facts = []
+        for element, modifiers in self.modifier_assignment:
+            facts += ['{} beat {}.'.format(', '.join(modifiers), element.describe())]
+        for group, monsters in self.group_assignment:
+            facts += ['{} are {}.'.format(', '.join(monsters), group)]
+        wiki = ' '.join(facts)
+        # f.write(wiki + '\n')
+        # for i in range(len(facts)):
+        #     if self.target_group in facts[i]:
+        #         monster = self.target_monster.name.split()[1]
+        #         facts[i] = facts[i].replace(monster, 'imp')
+        # wiki = ' '.join(facts)
+        # f.write(wiki + '\n')
+        return wiki
 
     def get_wiki_extract(self):
         labels = []
@@ -192,6 +213,129 @@ class Groups(RoomTask):
         o.place(pos, self.world)
         return o
 
+    # def _reset(self):
+    #     super()._reset()
+    #     self._cache.clear()
+    #     self.group_assignment.clear()
+    #     self.modifier_assignment.clear()
+
+    #     # sample dynamics
+    #     sample_group, sample_mod = random.choice(self.configs)
+    #     f.write('sample_group: ' + str(sample_group) + '\n')
+    #     f.write('sample_mod: ' + str(sample_mod) + '\n')
+    #     for group, monsters in sorted(list(sample_group)):
+    #         self.group_assignment.append((group, monsters))
+    #     for element, modifiers in sorted(list(sample_mod)):
+    #         self.modifier_assignment.append((ALL_TYPES[element], modifiers))
+
+    #     self.agent = self.place_object(self.Agent())
+
+    #     self.target_group, target_monsters = random.choice(self.group_assignment)
+
+    #     # choose a target element
+    #     target_element, target_modifiers = random.choice(self.modifier_assignment)
+
+    #     # choose a target monster
+    #     self.target_monster = self.place_object(self.Monster(target_element, name=random.choice(target_monsters)))
+    #     self.target_monster.char = random.choice(['!', '?'])
+
+    #     # create a target item
+    #     good = self.place_object(I.Unarmed(hit=100, damage='1'))
+    #     good.add_elemental_damage(target_element, dmg=50)
+    #     good.name = '{} {}'.format(random.choice(target_modifiers), random.choice(self.items))
+    #     # good.char = 'y'
+    #     good.char = random.choice(['y', 'n'])
+
+    #     # create a distractor item
+    #     self.distractor_item = bad = self.place_object(I.Unarmed(hit=100, damage='1'))
+    #     bad_element, bad_modifiers = random.choice([m for m in self.modifier_assignment if m[0] != target_element])
+    #     bad.add_elemental_damage(bad_element, dmg=50)
+    #     bad.name = '{} {}'.format(random.choice(bad_modifiers), random.choice(self.items))
+    #     # bad.char = 'n'
+    #     if good.char == 'y':
+    #         bad.char = 'n'
+    #     else:
+    #         bad.char = 'y'
+
+    #     # create a distractor monster
+    #     bad_group, bad_monsters = random.choice([g for g in self.group_assignment if g[0] != self.target_group])
+    #     self.distractor_monster = self.place_object(self.Monster(bad_element, name=random.choice(bad_monsters)))
+    #     # self.distractor_monster.char = '?'
+    #     if self.target_monster.char == '!':
+    #         self.distractor_monster.char = '?'
+    #     else:
+    #         self.distractor_monster.char = '!'
+
+
+    # def _reset(self):
+    #     super()._reset()
+    #     self._cache.clear()
+    #     self.group_assignment.clear()
+    #     self.modifier_assignment.clear()
+
+    #     # sample dynamics
+    #     # sample_group, sample_mod = random.choice(self.configs)
+    #     sample_group, sample_mod = self.configs[0]
+    #     # f.write('self.configs: ' + str(self.configs) + '\n')
+    #     # f.write('sample_group: ' + str(sample_group) + '\n')
+    #     # f.write('sample_mod: ' + str(sample_mod) + '\n')
+    #     for group, monsters in sorted(list(sample_group)):
+    #         self.group_assignment.append((group, monsters))
+    #     for element, modifiers in sorted(list(sample_mod)):
+    #         self.modifier_assignment.append((ALL_TYPES[element], modifiers))
+    #     # f.write('group_assignment: ' + str(self.group_assignment) + '\n')
+    #     # f.write('modifier_assignment: ' + str(self.modifier_assignment) + '\n')
+
+    #     self.agent = self.place_object(self.Agent())
+
+    #     # self.target_group, target_monsters = random.choice(self.group_assignment)
+    #     self.target_group, target_monsters = self.group_assignment[0]
+    #     # f.write('self.group_assignment: ' + str(self.group_assignment) + '\n')
+
+    #     # choose a target element
+    #     # target_element, target_modifiers = random.choice(self.modifier_assignment)
+    #     target_element, target_modifiers = self.modifier_assignment[0]
+    #     # f.write('self.modifier_assignment: ' + str(self.modifier_assignment) + '\n')
+
+    #     # choose a target monster
+    #     # f.write('target_monsters: ' + str(target_monsters) + '\n')
+    #     # self.target_monster = self.place_object(self.Monster(target_element, name=random.choice(target_monsters)))
+    #     self.target_monster = self.place_object(self.Monster(target_element, name=target_monsters[0]))
+    #     # self.target_monster.name = 'arcane shaman'
+    #     # self.target_monster.char = random.choice(['!', '?'])
+    #     self.target_monster.char = '!'
+
+    #     # create a target item
+    #     good = self.place_object(I.Unarmed(hit=100, damage='1'))
+    #     good.add_elemental_damage(target_element, dmg=50)
+    #     # good.name = '{} {}'.format(random.choice(target_modifiers), random.choice(self.items))
+    #     good.name = '{} {}'.format(target_modifiers[0], self.items[0])
+    #     good.char = 'y'
+    #     # good.char = random.choice(['y', 'n'])
+
+    #     # create a distractor item
+    #     self.distractor_item = bad = self.place_object(I.Unarmed(hit=100, damage='1'))
+    #     # bad_element, bad_modifiers = random.choice([m for m in self.modifier_assignment if m[0] != target_element])
+    #     bad_element, bad_modifiers = [m for m in self.modifier_assignment if m[0] != target_element][0]
+    #     bad.add_elemental_damage(bad_element, dmg=50)
+    #     bad.name = '{} {}'.format(bad_modifiers[0], self.items[0])
+    #     bad.char = 'n'
+    #     # if good.char == 'y':
+    #     #     bad.char = 'n'
+    #     # else:
+    #     #     bad.char = 'y'
+
+    #     # create a distractor monster
+    #     # bad_group, bad_monsters = random.choice([g for g in self.group_assignment if g[0] != self.target_group])
+    #     bad_group, bad_monsters = [g for g in self.group_assignment if g[0] != self.target_group][0]
+    #     # self.distractor_monster = self.place_object(self.Monster(bad_element, name=random.choice(bad_monsters)))
+    #     self.distractor_monster = self.place_object(self.Monster(bad_element, name=bad_monsters[0]))
+    #     # self.distractor_monster.char = '?'
+    #     if self.target_monster.char == '!':
+    #         self.distractor_monster.char = '?'
+    #     else:
+    #         self.distractor_monster.char = '!'
+
     def _reset(self):
         super()._reset()
         self._cache.clear()
@@ -200,8 +344,6 @@ class Groups(RoomTask):
 
         # sample dynamics
         sample_group, sample_mod = random.choice(self.configs)
-        f.write('sample_group: ' + str(sample_group) + '\n')
-        f.write('sample_mod: ' + str(sample_mod) + '\n')
         for group, monsters in sorted(list(sample_group)):
             self.group_assignment.append((group, monsters))
         for element, modifiers in sorted(list(sample_mod)):
@@ -210,17 +352,20 @@ class Groups(RoomTask):
         self.agent = self.place_object(self.Agent())
 
         self.target_group, target_monsters = random.choice(self.group_assignment)
+        self.target_monster_group = self.target_group
 
         # choose a target element
         target_element, target_modifiers = random.choice(self.modifier_assignment)
 
         # choose a target monster
         self.target_monster = self.place_object(self.Monster(target_element, name=random.choice(target_monsters)))
+        self.target_monster_mod, self.target_monster_type = self.target_monster.name.split()
 
         # create a target item
         good = self.place_object(I.Unarmed(hit=100, damage='1'))
         good.add_elemental_damage(target_element, dmg=50)
         good.name = '{} {}'.format(random.choice(target_modifiers), random.choice(self.items))
+        self.target_weapon_mod = good.name.split()[0]
         good.char = 'y'
 
         # create a distractor item
@@ -234,6 +379,15 @@ class Groups(RoomTask):
         bad_group, bad_monsters = random.choice([g for g in self.group_assignment if g[0] != self.target_group])
         self.distractor_monster = self.place_object(self.Monster(bad_element, name=random.choice(bad_monsters)))
         self.distractor_monster.char = '?'
+
+    def get_relevant_statements(self):
+        s1 = self.target_weapon_mod + ' beat ' + self.target_monster_mod + '.'
+        s2 = self.target_monster_type + ' are ' + self.target_monster_group + '.'
+        r = random.random()
+        s = s1 + ' ' + s2
+        if r < 0.5:
+            s = s2 + ' ' + s1
+        return s
 
 
 class GroupsDev(Groups):

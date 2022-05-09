@@ -59,3 +59,7 @@ class UCBBandit:
     self.t = 1
     self.counts = np.ones(self._number_of_arms)
     self.Q = np.zeros(self._number_of_arms)
+
+class DQNWriter:
+  def __init__(self):
+    pass

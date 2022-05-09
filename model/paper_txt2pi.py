@@ -7,7 +7,7 @@
 import torch
 from torch import nn
 from model.paper_film import Model as Base
-
+f = open("emb.txt", "w")
 
 class DoubleFILM(nn.Module):
     # from https://arxiv.org/pdf/1806.01946.pdf
@@ -61,6 +61,7 @@ class Model(Base):
 
     def encode_wiki(self, inputs):
         T, B, wiki_len = inputs['wiki'].size()
+        f.write(str(inputs['wiki']) + '\n')
         if self.disable_wiki:
             zeros = torch.Tensor(T, B, 2*self.drnn).zero_().to(inputs['wiki'].device)
             return zeros, zeros

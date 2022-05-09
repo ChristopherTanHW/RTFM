@@ -15,7 +15,7 @@ from .. import featurizer as F
 
 ALL_TYPES = [types.Cold, types.Fire, types.Lightning]
 
-f = open("debugging.txt", "w")
+# f = open("debugging.txt", "w")
 
 class RockPaperScissors(RoomTask):
     split_index = 0 #originally 0
@@ -119,18 +119,18 @@ class RockPaperScissors(RoomTask):
     def get_task(self):
         return 'dragon.'
 
-    # def get_wiki(self):
-    #     facts = []
-    #     for el in ALL_TYPES:
-    #         facts.append('{} beats {}.'.format(self.TYPE_TO_ITEM[el], self.TYPE_TO_MONSTER[el]))
-    #     wiki = ' '.join(facts)
-    #     # f.write(wiki + '\n')
-    #     return wiki
-
     def get_wiki(self):
-        wiki = 'a beats b. b beats a. b beats c.'
-        f.write(wiki + '\n')
+        facts = []
+        for el in ALL_TYPES:
+            facts.append('{} beats {}.'.format(self.TYPE_TO_ITEM[el], self.TYPE_TO_MONSTER[el]))
+        wiki = ' '.join(facts)
+        # f.write(wiki + '\n')
         return wiki
+
+    # def get_wiki(self):
+    #     # wiki = 'a beats b. b beats a. b beats c.'
+    #     # f.write(wiki + '\n')
+    #     return ' '
 
     def build_vocab(self):
         super().build_vocab()
@@ -151,10 +151,10 @@ class RockPaperScissors(RoomTask):
         self.agent = self.place_object(self.Agent())
 
         self.set_types(random.choice(self.labels))
-        self.set_types(('b', 'a', 'c')) #in original train distribution
+        # self.set_types(('b', 'a', 'c')) #in original train distribution
         # self.set_types(('e', 'c', 'a'))
-        # self.type_index = np.random.randint(0, len(ALL_TYPES))
-        self.type_index = 1
+        self.type_index = np.random.randint(0, len(ALL_TYPES))
+        # self.type_index = 1
         monster_type = ALL_TYPES[self.type_index]
         # f.write(str(monster_type) + '\n')
 

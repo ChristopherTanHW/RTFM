@@ -38,6 +38,7 @@ class Task(gym.Env):
 
         # observation shapes
         self.observation_space = self.featurizer.get_observation_space(self)
+        self.f = open("task.txt", "w")
 
         self.vocab = Vocab(['pad', 'eos', ''])
         self.build_vocab()
@@ -70,6 +71,8 @@ class Task(gym.Env):
             self.agent.queue_action(Action)
         executed = self.engine.run_turn(self.world)
         self.history.append(executed)
+        if self.history:
+            self.f.write(str(self.history[-1]) + '\n')
         r, f, w = self.get_reward_finish_win()
         return self.featurizer.featurize(self), r, f, w
 

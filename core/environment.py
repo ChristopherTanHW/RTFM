@@ -8,7 +8,6 @@
 
 import torch
 
-
 def _format_frame(frame):
     frame = torch.from_numpy(frame)
     return frame.view((1, 1) + frame.shape)  # (...) -> (T,B,...).
@@ -48,6 +47,10 @@ class Environment:
         episode_step = self.episode_step
         episode_return = self.episode_return
         if done:
+            traj = self.gym_env.history
+            f = open("environment.txt", "w")
+            f.write(str(traj) + '\n')
+            f.close()
             frame = self.gym_env.reset()
             self.episode_return = torch.zeros(1, 1)
             self.episode_step = torch.zeros(1, 1, dtype=torch.int32)

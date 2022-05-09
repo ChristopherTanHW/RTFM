@@ -1,10 +1,10 @@
 from distutils import command
 import os
 
-args_dict = {
+# args_dict = {
 # 'env':'rock_paper_scissors-v0',
-'env': 'groups_simple_stationary-v0',
-'model':'paper_txt2pi',
+# # 'env': 'groups_simple_stationary-v0',
+# 'model':'paper_txt2pi',
 # 'demb':'10',
 # 'drnn_small': '10',
 # 'drnn':'100',
@@ -12,13 +12,31 @@ args_dict = {
 # 'num_actors':'20',
 # 'batch_size':'24',
 # 'learning_rate':'0.0007',
-# 'total_frames':'1000000',
+# 'total_frames':'50000000',
 # 'height':'10',
 # 'width':'10',
-'mode': 'test',
-'xpid': 'groups_simple_stationary:paper_txt2pi:yeswiki:default',
-'resume': 'checkpoints/groups_simple_stationary:paper_txt2pi:yeswiki:default/model.tar'}
+# 'mode': 'train',
+# 'xpid': 'RPSdefault_butsize10'}
+# 'resume': 'checkpoints/groups_simple_stationary:paper_txt2pi:yeswiki:default/model.tar'}
 
+#groups env
+args_dict = {
+'env': 'groups_simple_stationary-v0',
+'model':'paper_txt2pi',
+# 'demb':'30',
+# 'drnn_small': '10',
+# 'drnn':'100',
+# 'drep':'400',
+# 'num_actors':'20',
+# 'batch_size':'24',
+# 'learning_rate':'0.0007',
+# 'total_frames':'300000',
+# 'height':'6',
+# 'width':'6',
+'mode': 'collect_rollouts',
+# 'xpid': 'groups_simple_stationary_resume_constant_game_0lie', #for training
+'xpid': 'groups_simple_stationary:paper_txt2pi:yeswiki:default', #for testing
+'resume': 'checkpoints/groups_simple_stationary:paper_txt2pi:yeswiki:default/model.tar'}
 
 #this particular experiment looks at learning rate
 for i in range(1,2):

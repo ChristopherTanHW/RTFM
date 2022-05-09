@@ -7,7 +7,7 @@
 import torch
 from torch import nn
 from model.reader import Model as Base
-# f = open("embeddings.txt", "w")
+f = open("emb.txt", "w")
 
 class Model(Base):
 
@@ -29,6 +29,7 @@ class Model(Base):
 
     def encode_wiki(self, inputs):
         T, B, wiki_len = inputs['wiki'].size()
+        f.write(str(inputs['wiki']) + '\n')
         if self.disable_wiki:
             return torch.Tensor(T, B, self.demb).zero_().to(inputs['wiki'].device)
         else:

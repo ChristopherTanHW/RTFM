@@ -47,14 +47,17 @@ from core import vtrace
 import pandas as pd
 import wandb
 
-from metaWriter import UCBBandit
+from metaWriter import UCBBandit, DQNWriter
 from rtfm.tasks import RockPaperScissors
+import pickle
 
 project_name = "num_objects"
 
 Net = None
 
-f = open("debugging.txt", "w")
+rollout_file = open("rollout.txt", "w")
+
+pickle_dataset = open("pickle_dataset", "wb")
 
 from types import MethodType
 
@@ -295,7 +298,7 @@ def train(flags):  # pylint: disable=too-many-branches, too-many-statements
     #     os.path.expanduser('%s/%s/%s' % (flags.savedir, flags.xpid,
     #                                      'RPS2.tar')))
     checkpointpath = os.path.expandvars(
-        os.path.expanduser('%s/%s/%s' % (flags.savedir, 'RPS',
+        os.path.expanduser('%s/%s/%s' % (flags.savedir, flags.xpid,
                                          'model.tar')))
     T = flags.unroll_length
     B = flags.batch_size
@@ -483,11 +486,12 @@ def action_to_wiki(action, action_map):
 
 # ------------------------------------------------
 
-def train_meta_writer(flags, num_eps: int = 500):
-    # all_orders = get_all_orders([['a'], ['b'], ['c']], 6, ['a', 'b', 'c'])
-    # meta_action_map = all_orders
-    meta_action_map = {0: 'a', 1: 'b', 2: 'c'}
+def train_meta_writer(flags, num_eps: int = 10000):
+    all_orders = get_all_orders([['a'], ['b'], ['c']], 6, ['a', 'b', 'c'])
+    meta_action_map = all_orders
+    # meta_action_map = {0: 'a', 1: 'b', 2: 'c'}
     meta_writer = UCBBandit(len(meta_action_map), bonus_multiplier=1/np.sqrt(2))
+    counter = 0
 
     # meta_action_map = {0: 'a', 1: 'c', 2: 'e'}
     # meta_writer = TabQ(0.1, 0.99, 0.1, 6, 3)
@@ -546,9 +550,14 @@ def train_meta_writer(flags, num_eps: int = 500):
                 # BANDIT CODE
                 meta_action = meta_writer.step(meta_action, observation['episode_return'].item())
                 wiki_str = 'a beats b. ' + meta_action_map[meta_action] + ' beats a. b beats c.'
-                f.write(wiki_str + '\n')
-                # wiki = action_to_wiki(meta_action, meta_action_map)
+                # f.write(wiki_str + '\n')
+                # wiki = bandit_action_to_wiki(meta_action, meta_action_map)
                 env.gym_env.get_wiki = MethodType(lambda x : wiki_str, env.gym_env)
+                # f.write(wiki + '\n')
+
+                counter += 1
+                if counter % 10 == 0:
+                    print('eps: ', counter)
 
                 #MDP AGENT CODE
                 #randomly sample which blank to fill in
@@ -592,6 +601,139 @@ def train_meta_writer(flags, num_eps: int = 500):
     print(rolling_win_rate)
     print(rolling_win_counter)
     print(rolling_wins)
+
+def train_meta_DQN(flags, num_eps: int = 10):
+    meta_writer = DQNWriter
+
+    rolling_win_rate = []
+    rolling_wins = 0
+    rolling_window = 10
+    rolling_win_counter = 0
+
+    from rtfm import featurizer as X
+    gym_env = Net.create_env(flags)
+    env = environment.Environment(gym_env)
+
+    model = Net.make(flags, gym_env)
+    model.eval()
+    checkpointpath = os.path.expandvars(
+        os.path.expanduser('%s/%s/%s' % (flags.savedir, flags.xpid,
+                                            'model.tar')))
+    checkpoint = torch.load(checkpointpath, map_location='cpu')
+    model.load_state_dict(checkpoint['model_state_dict'])
+
+    observation = env.initial()
+    returns = []
+    won = []
+    entropy = []
+    ep_len = []
+    while len(won) < num_eps:
+        done = False
+        steps = 0
+        while not done:
+            agent_outputs = model(observation)
+            observation = env.step(agent_outputs['action'])
+            policy = F.softmax(agent_outputs['policy_logits'], dim=-1)
+            log_policy = F.log_softmax(agent_outputs['policy_logits'], dim=-1)
+            e = -torch.sum(policy * log_policy, dim=-1)
+            entropy.append(e.mean(0).item())
+            steps += 1
+            done = observation['done'].item()
+            if observation['done'].item():
+                f.write(str(observation['task']) + '\n')
+                f.write(str(observation['wiki']) + '\n')
+                f.write(str(observation['episode_return'].item()) + '\n')
+                # print('wiki: ', env.gym_env.get_wiki())
+                # print('task: ', env.gym_env.get_task())
+                # f1 = open("environment.txt", "r")
+                # f.write(f1.read() + '\n')
+                rolling_win_counter += 1
+                if observation['reward'][0][0].item() > 0.5:
+                    if rolling_win_counter < 10:
+                        rolling_wins += 1
+                    else:
+                        rolling_win_rate.append(rolling_wins / rolling_window)
+                        rolling_wins = 0
+                        rolling_win_counter = 0
+
+                returns.append(observation['episode_return'].item())
+                won.append(observation['reward'][0][0].item() > 0.5)
+                ep_len.append(steps)
+
+    env.close()
+    logging.info('Average returns over %i episodes: %.2f. Win rate: %.2f. Entropy: %.2f. Len: %.2f', num_eps, sum(returns)/len(returns), sum(won)/len(returns), sum(entropy)/max(1, len(entropy)), sum(ep_len)/len(ep_len))
+    print(rolling_win_rate)
+    print(rolling_win_counter)
+    print(rolling_wins)
+
+
+def collect_rollouts(flags, num_eps: int = 10): #num_eps originall 2
+    from rtfm import featurizer as X
+    gym_env = Net.create_env(flags)
+    # gym_env = RockPaperScissors(featurizer=X.Concat([X.Text(),X.ValidMoves(), X.RelativePosition()]), max_placement=1)
+    if flags.mode == 'test_render':
+        gym_env.featurizer = X.Concat([gym_env.featurizer, X.Terminal()])
+    env = environment.Environment(gym_env)
+    # env.gym_env.get_wiki = MethodType(lambda x : 'a beats c. c beats b. b beats a.', env.gym_env)
+
+    if not flags.random_agent:
+        model = Net.make(flags, gym_env)
+        model.eval()
+        if flags.xpid is None:
+            checkpointpath = './results_latest/model.tar'
+        else:
+            checkpointpath = os.path.expandvars(
+                os.path.expanduser('%s/%s/%s' % (flags.savedir, flags.xpid,
+                                                 'model.tar')))
+        checkpoint = torch.load(checkpointpath, map_location='cpu')
+        model.load_state_dict(checkpoint['model_state_dict'])
+
+    observation = env.initial()
+    returns = []
+    won = []
+    entropy = []
+    ep_len = []
+    dataset = []
+    while len(won) < num_eps:
+        done = False
+        steps = 0
+        relevant_statement = env.gym_env.get_relevant_statements()
+        entry = {}
+        entry['relevant_statements'] = relevant_statement
+        rollout = []
+        get_task_flag = True
+        while not done:
+            if flags.random_agent:
+                action = torch.zeros(1, 1, dtype=torch.int32)
+                # action[0][0] = random.randint(0, gym_env.action_space.n - 1)
+                action[0][0] = random.randint(0, len(gym_env.action_space) - 1)
+                observation = env.step(action)
+            else:
+                agent_outputs = model(observation)
+                observation = env.step(agent_outputs['action'])
+                if get_task_flag:
+                    entry['task_emb'] = observation['task']
+                    get_task_flag = False
+                rollout.append(observation['name'])
+                rollout_file.write(str(observation['name'].size()) + '\n')
+                policy = F.softmax(agent_outputs['policy_logits'], dim=-1)
+                log_policy = F.log_softmax(agent_outputs['policy_logits'], dim=-1)
+                e = -torch.sum(policy * log_policy, dim=-1)
+                entropy.append(e.mean(0).item())
+
+            steps += 1
+            done = observation['done'].item()
+            if observation['done'].item():
+                entry['rollout'] = torch.stack(rollout)
+                dataset.append(entry)
+                returns.append(observation['episode_return'].item())
+                won.append(observation['reward'][0][0].item() > 0.5)
+                ep_len.append(steps)
+
+    env.close()
+    logging.info('Average returns over %i episodes: %.2f. Win rate: %.2f. Entropy: %.2f. Len: %.2f', num_eps, sum(returns)/len(returns), sum(won)/len(returns), sum(entropy)/max(1, len(entropy)), sum(ep_len)/len(ep_len))
+    pickle.dump(dataset,pickle_dataset)
+    pickle_dataset.close()
 
 def test(flags, num_eps: int = 10): #num_eps originall 2
     from rtfm import featurizer as X
@@ -646,6 +788,58 @@ def test(flags, num_eps: int = 10): #num_eps originall 2
     env.close()
     logging.info('Average returns over %i episodes: %.2f. Win rate: %.2f. Entropy: %.2f. Len: %.2f', num_eps, sum(returns)/len(returns), sum(won)/len(returns), sum(entropy)/max(1, len(entropy)), sum(ep_len)/len(ep_len))
 
+def train_simple(flags, num_eps: int = 10):
+    from rtfm import featurizer as X
+    gym_env = Net.create_env(flags)
+    # gym_env = RockPaperScissors(featurizer=X.Concat([X.Text(),X.ValidMoves(), X.RelativePosition()]), max_placement=1)
+    if flags.mode == 'test_render':
+        gym_env.featurizer = X.Concat([gym_env.featurizer, X.Terminal()])
+    env = environment.Environment(gym_env)
+    # env.gym_env.get_wiki = MethodType(lambda x : 'a beats c. c beats b. b beats a.', env.gym_env)
+
+    if not flags.random_agent:
+        model = Net.make(flags, gym_env)
+        # model.eval()
+        if flags.xpid is None:
+            checkpointpath = './results_latest/model.tar'
+        else:
+            checkpointpath = os.path.expandvars(
+                os.path.expanduser('%s/%s/%s' % (flags.savedir, flags.xpid,
+                                                 'model.tar')))
+        checkpoint = torch.load(checkpointpath, map_location='cpu')
+        model.load_state_dict(checkpoint['model_state_dict'])
+
+    observation = env.initial()
+    returns = []
+    won = []
+    entropy = []
+    ep_len = []
+    while len(won) < num_eps:
+        done = False
+        steps = 0
+        while not done:
+            if flags.random_agent:
+                action = torch.zeros(1, 1, dtype=torch.int32)
+                # action[0][0] = random.randint(0, gym_env.action_space.n - 1)
+                action[0][0] = random.randint(0, len(gym_env.action_space) - 1)
+                observation = env.step(action)
+            else:
+                agent_outputs = model(observation)
+                observation = env.step(agent_outputs['action'])
+                policy = F.softmax(agent_outputs['policy_logits'], dim=-1)
+                log_policy = F.log_softmax(agent_outputs['policy_logits'], dim=-1)
+                e = -torch.sum(policy * log_policy, dim=-1)
+                entropy.append(e.mean(0).item())
+
+            steps += 1
+            done = observation['done'].item()
+            if observation['done'].item():
+                returns.append(observation['episode_return'].item())
+                won.append(observation['reward'][0][0].item() > 0.5)
+                ep_len.append(steps)
+
+    env.close()
+    logging.info('Average returns over %i episodes: %.2f. Win rate: %.2f. Entropy: %.2f. Len: %.2f', num_eps, sum(returns)/len(returns), sum(won)/len(returns), sum(entropy)/max(1, len(entropy)), sum(ep_len)/len(ep_len))
 
 def main(flags):
     flags.num_buffers = 2 * flags.num_actors
@@ -656,13 +850,17 @@ def main(flags):
     global Net
     Net = importlib.import_module('model.{}'.format(flags.model)).Model
     if flags.mode == 'train':
-        with wandb.init(project="RPS", config=config_dict, 
-        name='fromcheckpoint_IDsinglegame_1lie_samemonster', dir='/scratch0/NOT_BACKED_UP/sml/christan/rtfm'):
+        with wandb.init(project="GroupsSimpleStationary", config=config_dict, 
+        name='fromcheckpoint_singlegame_1lie1', dir='/scratch0/NOT_BACKED_UP/sml/christan/rtfm'):
             train(flags)
     elif flags.mode == 'test':
         test(flags)
-    else:
+    elif flags.mode == 'train_writer':
         train_meta_writer(flags)
+    elif flags.mode == 'collect_rollouts':
+        collect_rollouts(flags)
+    else:
+        train_meta_DQN(flags)
 
 
 if __name__ == '__main__':

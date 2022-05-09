@@ -12,6 +12,7 @@ from torch.nn import functional as F
 from torch.nn.utils import rnn as rnn_utils
 from rtfm import featurizer as X
 
+f = open('reader.txt', 'w')
 
 class Model(nn.Module):
 
@@ -78,6 +79,9 @@ class Model(nn.Module):
         inv = self.encode_inv(inputs)
         wiki = self.encode_wiki(inputs)
         task = self.encode_task(inputs)
+        f.write(str(inputs['wiki']) + '\n')
+        f.write(str(wiki[0]) + '\n')
+        f.write(str(wiki[1]) + '\n')
 
         rep = self.fuse(inputs, cell, inv, wiki, task)
 

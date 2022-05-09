@@ -11,6 +11,7 @@ import random
 from pprint import pprint
 from rtfm.dynamics import monster as M, item as I, world_object as O, event as E
 
+f = open("featurizer.txt", "w")
 
 class Featurizer:
 
@@ -144,7 +145,9 @@ class Terminal(Featurizer):
         print('-' * 80)
         if task.history:
             for event in task.history[-1]:
-                print(event)
+                # f.write(str(event) + '\n')
+                # print(event)
+                pass
 
         print('-' * 80)
         print('Monsters:')
